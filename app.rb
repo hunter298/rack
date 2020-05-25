@@ -1,19 +1,20 @@
+require_relative 'format_time'
+
 class App
 
-DATE_FROMATS = { 'year' => '%Y', 'month' => '%m', 'day' => '%d', 'hour' => '%H', 'minute' => '%M', 'second' => '%S' }
+  attr_accessor :formatter
 
+  ROUTES = { '/time' => FormatTime }
 
   def call(env)
-    [status(env), headers, body(env)]
+    @formatter = ROUTES[env['REQUEST_PATH']]&.new(env)
+    [status, headers, body]
   end
 
-  def query(env)
-    URI.unescape(env['QUERY_STRING'].delete_prefix('format=')).split(',')
-  end
 
-  def status(env)
-    if env['REQUEST_PATH'] == '/time' && env['REQUEST_METHOD'] == 'GET'
-      if query(env).all? { |f| DATE_FROMATS[f] }
+  def status
+    if @formatter
+      if @formatter.valid?
         200
       else
         400
@@ -27,13 +28,15 @@ DATE_FROMATS = { 'year' => '%Y', 'month' => '%m', 'day' => '%d', 'hour' => '%H',
     { 'Content-Type' => 'text/plain' }
   end
 
-  def body(env)
-    if status(env) == 200
-      [Time.now.strftime(query(env).map{ |q| DATE_FROMATS[q] }.join('-'))]
-    elsif status(env) == 400
-      ["Unknown time format [#{query(env).reject { |f| DATE_FROMATS[f] }.join(', ')}]"]
-    elsif status(env) == 404
-      ['Page not found']
+  def body
+    if @formatter
+      if @formatter.valid?
+        @formatter.time
+      else
+        @formatter.invalid_formats
+      end
+    else
+      ['No page found']
     end
   end
 
